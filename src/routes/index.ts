@@ -4,6 +4,7 @@ import depositsRouter from './deposits';
 import nftsRouter from './nfts';
 import proposalsRouter from './proposals';
 import eventsRouter from './events';
+import uploadRouter from './upload';
 
 const router = Router();
 
@@ -12,6 +13,7 @@ router.use('/deposits', depositsRouter);
 router.use('/nfts', nftsRouter);
 router.use('/proposals', proposalsRouter);
 router.use('/events', eventsRouter);
+router.use('/upload', uploadRouter);
 
 // Health check
 router.get('/health', (_req, res) => {

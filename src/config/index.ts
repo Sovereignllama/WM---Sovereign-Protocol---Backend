@@ -12,6 +12,9 @@ export const config = {
   rpcUrl: process.env.GORBAGANA_RPC_URL || 'https://rpc.trashscan.io',
   programId: process.env.PROGRAM_ID || '',
   
+  // Pinata IPFS
+  pinataJwt: process.env.PINATA_JWT || '',
+  
   // Webhooks
   heliusWebhookSecret: process.env.HELIUS_WEBHOOK_SECRET || '',
   
