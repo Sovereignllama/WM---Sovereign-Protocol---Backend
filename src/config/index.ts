@@ -18,6 +18,9 @@ export const config = {
   // Webhooks
   heliusWebhookSecret: process.env.HELIUS_WEBHOOK_SECRET || '',
   
+  // Pool Price Worker
+  poolPriceWorkerUrl: process.env.POOL_PRICE_WORKER_URL || 'https://waste-management-pool-price-tracker.onrender.com',
+
   // CORS
   corsOrigins: (process.env.CORS_ORIGINS || 'http://localhost:3000').split(','),
   

@@ -48,10 +48,15 @@ export interface ISovereign extends Document {
   recoveryTarget: string;
   recoveryComplete: boolean;
   
-  // LP info
-  whirlpool?: string;
-  positionMint?: string;
-  permanentLock?: string;
+  // Engine pool
+  enginePool?: string;
+
+  // LP info (deprecated — DLMM/SAMM era)
+  whirlpool?: string;     // deprecated
+  positionMint?: string;  // deprecated
+  lbPair?: string;        // deprecated
+  position?: string;      // deprecated
+  permanentLock?: string; // deprecated
   
   // Unwind state
   unwindGorBalance: string;
@@ -110,8 +115,13 @@ const SovereignSchema = new Schema<ISovereign>({
   recoveryTarget: { type: String, default: '0' },
   recoveryComplete: { type: Boolean, default: false },
   
+  enginePool: String,
+
+  // Deprecated DLMM/SAMM fields — kept for historical data
   whirlpool: String,
   positionMint: String,
+  lbPair: String,
+  position: String,
   permanentLock: String,
   
   unwindGorBalance: { type: String, default: '0' },

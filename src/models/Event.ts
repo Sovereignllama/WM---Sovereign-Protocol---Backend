@@ -16,7 +16,18 @@ export type EventType =
   | 'SovereignUnwound'
   | 'UnwindClaimed'
   | 'GenesisNFTMinted'
-  | 'GenesisNFTTransferred';
+  | 'GenesisNFTTransferred'
+  // V3 Engine events
+  | 'EngineSwap'
+  | 'BinFilled'
+  | 'BinEmptied'
+  | 'BinPageAllocated'
+  | 'BinFeeSettled'
+  | 'PoolCreated'
+  | 'PoolDrained'
+  | 'RecoveryComplete'
+  | 'LpFeeClaimed'
+  | 'CreatorFeeClaimed';
 
 export interface IEvent extends Document {
   // Transaction info
