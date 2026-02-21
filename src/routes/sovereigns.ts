@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { Sovereign, SovereignStatus } from '../models';
+import { Sovereign, SovereignStatus, Event } from '../models';
 
 const router = Router();
 
@@ -65,6 +65,8 @@ router.get('/stats', async (_req: Request, res: Response) => {
       statusCounts,
       totalRaised,
       totalFees,
+      volumeAgg,
+      tradeCount,
     ] = await Promise.all([
       Sovereign.countDocuments(),
       Sovereign.aggregate([
@@ -77,6 +79,13 @@ router.get('/stats', async (_req: Request, res: Response) => {
       Sovereign.aggregate([
         { $group: { _id: null, total: { $sum: { $toLong: '$totalGorFeesDistributed' } } } }
       ]),
+      // Sum gorAmount from all EngineSwap events for total trading volume
+      Event.aggregate([
+        { $match: { eventType: 'EngineSwap' } },
+        { $group: { _id: null, totalVolume: { $sum: { $toLong: '$data.gorAmount' } } } }
+      ]),
+      // Total number of trades
+      Event.countDocuments({ eventType: 'EngineSwap' }),
     ]);
 
     const statusMap: Record<string, number> = {};
@@ -95,6 +104,8 @@ router.get('/stats', async (_req: Request, res: Response) => {
       },
       totalRaisedLamports: totalRaised[0]?.total?.toString() || '0',
       totalFeesDistributedLamports: totalFees[0]?.total?.toString() || '0',
+      totalTradingVolumeLamports: volumeAgg[0]?.totalVolume?.toString() || '0',
+      totalTradeCount: tradeCount,
     });
   } catch (error) {
     console.error('Error fetching stats:', error);

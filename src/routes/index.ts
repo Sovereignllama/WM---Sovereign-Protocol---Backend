@@ -5,6 +5,7 @@ import nftsRouter from './nfts';
 import proposalsRouter from './proposals';
 import eventsRouter from './events';
 import uploadRouter from './upload';
+import sovereignPagesRouter from './sovereign-pages';
 
 const router = Router();
 
@@ -14,6 +15,7 @@ router.use('/nfts', nftsRouter);
 router.use('/proposals', proposalsRouter);
 router.use('/events', eventsRouter);
 router.use('/upload', uploadRouter);
+router.use('/sovereign-pages', sovereignPagesRouter);
 
 // Health check
 router.get('/health', (_req, res) => {
