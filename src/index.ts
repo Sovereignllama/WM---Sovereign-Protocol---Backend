@@ -13,6 +13,9 @@ async function main() {
 
   const app = express();
 
+  // Trust reverse proxy (Render, etc.) for correct client IP in rate limiter
+  app.set('trust proxy', 1);
+
   // Security middleware
   app.use(helmet());
   
