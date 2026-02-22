@@ -276,6 +276,40 @@ function upsertSovereign(pda: PublicKey, parsed: ParsedSovereignState) {
 }
 
 // ============================================================
+// Retry helper
+// ============================================================
+
+const MAX_RETRIES = 3;
+const BASE_DELAY_MS = 5_000; // 5s, 10s, 20s
+
+async function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchWithRetry(connection: Connection): ReturnType<Connection['getProgramAccounts']> {
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      return await connection.getProgramAccounts(PROGRAM_ID, {
+        filters: [
+          { memcmp: { offset: 0, bytes: DISCRIMINATOR.toString('base64'), encoding: 'base64' } },
+        ],
+      });
+    } catch (err: any) {
+      const msg = err?.message || String(err);
+      const isRetryable = msg.includes('503') || msg.includes('502') || msg.includes('429') || msg.includes('timeout') || msg.includes('ECONNRESET');
+      if (isRetryable && attempt < MAX_RETRIES) {
+        const delay = BASE_DELAY_MS * Math.pow(2, attempt - 1);
+        console.warn(`[ChainSync] Attempt ${attempt}/${MAX_RETRIES} failed (${msg.substring(0, 80)}), retrying in ${delay / 1000}s...`);
+        await sleep(delay);
+      } else {
+        throw err;
+      }
+    }
+  }
+  throw new Error('Unreachable');
+}
+
+// ============================================================
 // Main sync function
 // ============================================================
 
@@ -287,11 +321,7 @@ async function syncOnce(connection: Connection): Promise<number> {
   try {
     console.log('[ChainSync] Fetching all SovereignState accounts...');
 
-    const accounts = await connection.getProgramAccounts(PROGRAM_ID, {
-      filters: [
-        { memcmp: { offset: 0, bytes: DISCRIMINATOR.toString('base64'), encoding: 'base64' } },
-      ],
-    });
+    const accounts = await fetchWithRetry(connection);
 
     console.log(`[ChainSync] Found ${accounts.length} sovereign account(s) on-chain`);
 
@@ -299,7 +329,6 @@ async function syncOnce(connection: Connection): Promise<number> {
     for (const { pubkey, account } of accounts) {
       try {
         const parsed = deserializeSovereignState(Buffer.from(account.data));
-        // Derive PDA to verify, but use actual pubkey from chain
         await upsertSovereign(pubkey, parsed);
         upserted++;
       } catch (err) {
@@ -340,13 +369,17 @@ export function startChainSync(intervalMs = 60_000): void {
     return;
   }
 
-  const connection = new Connection(config.rpcUrl, 'confirmed');
+  const connection = new Connection(config.rpcUrl, {
+    commitment: 'confirmed',
+    confirmTransactionInitialTimeout: 60_000,
+  });
   console.log(`[ChainSync] Starting — syncing every ${intervalMs / 1000}s from ${config.rpcUrl}`);
 
-  // First sync immediately
-  syncOnce(connection);
-
-  pollTimer = setInterval(() => syncOnce(connection), intervalMs);
+  // Delay first sync by 10s to let the RPC warm up after deploy
+  setTimeout(() => {
+    syncOnce(connection);
+    pollTimer = setInterval(() => syncOnce(connection), intervalMs);
+  }, 10_000);
 }
 
 /**
