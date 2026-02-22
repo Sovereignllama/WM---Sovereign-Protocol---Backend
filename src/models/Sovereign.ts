@@ -1,7 +1,7 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
-// Sovereign Status enum matching on-chain
-export type SovereignStatus = 'Bonding' | 'Recovery' | 'Active' | 'Failed' | 'Unwound';
+// Sovereign Status enum matching on-chain (all 10 states)
+export type SovereignStatus = 'Bonding' | 'Finalizing' | 'PoolCreated' | 'Recovery' | 'Active' | 'Unwinding' | 'Unwound' | 'Failed' | 'Halted' | 'Retired';
 export type SovereignType = 'TokenLaunch' | 'BYOToken';
 
 export interface ISovereign extends Document {
@@ -41,11 +41,16 @@ export interface ISovereign extends Document {
   creatorEscrow: string;
   creatorMaxBuyBps: number;
   
+  // Fee control
+  feeControlRenounced: boolean;
+  metadataUri?: string;
+  
   // Recovery tracking
   totalGorFeesCollected: string;
   totalGorFeesDistributed: string;
   totalTokenFeesCollected: string;
   recoveryTarget: string;
+  totalRecovered: string;
   recoveryComplete: boolean;
   
   // Engine pool
@@ -95,7 +100,7 @@ const SovereignSchema = new Schema<ISovereign>({
   
   status: { 
     type: String, 
-    enum: ['Bonding', 'Recovery', 'Active', 'Failed', 'Unwound'], 
+    enum: ['Bonding', 'Finalizing', 'PoolCreated', 'Recovery', 'Active', 'Unwinding', 'Unwound', 'Failed', 'Halted', 'Retired'], 
     default: 'Bonding',
     index: true 
   },
@@ -109,10 +114,14 @@ const SovereignSchema = new Schema<ISovereign>({
   creatorEscrow: { type: String, default: '0' },
   creatorMaxBuyBps: { type: Number, default: 100 },
   
+  feeControlRenounced: { type: Boolean, default: false },
+  metadataUri: String,
+  
   totalGorFeesCollected: { type: String, default: '0' },
   totalGorFeesDistributed: { type: String, default: '0' },
   totalTokenFeesCollected: { type: String, default: '0' },
   recoveryTarget: { type: String, default: '0' },
+  totalRecovered: { type: String, default: '0' },
   recoveryComplete: { type: Boolean, default: false },
   
   enginePool: String,

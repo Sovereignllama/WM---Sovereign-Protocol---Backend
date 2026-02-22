@@ -6,6 +6,7 @@ import { config } from './config';
 import { connectDatabase } from './config/database';
 import apiRoutes from './routes';
 import webhookRoutes from './routes/webhook';
+import { startChainSync } from './services/chain-sync';
 
 async function main() {
   // Connect to MongoDB
@@ -73,6 +74,9 @@ async function main() {
 ║  RPC:         ${config.rpcUrl.substring(0, 38).padEnd(40)}║
 ╚═══════════════════════════════════════════════════════╝
     `);
+
+    // Start chain sync after server is listening (60s interval)
+    startChainSync(60_000);
   });
 }
 
