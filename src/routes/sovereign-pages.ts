@@ -110,7 +110,7 @@ async function requireCreatorAuth(req: Request, res: Response): Promise<boolean>
  */
 router.get('/:sovereignId', async (req: Request, res: Response) => {
   try {
-    const sovereignId = parseInt(req.params.sovereignId, 10);
+    const sovereignId = parseInt(req.params.sovereignId as string, 10);
     if (isNaN(sovereignId)) {
       return res.status(400).json({ error: 'Invalid sovereignId' });
     }
@@ -134,7 +134,7 @@ router.get('/:sovereignId', async (req: Request, res: Response) => {
  */
 router.put('/:sovereignId', async (req: Request, res: Response) => {
   try {
-    const sovereignId = parseInt(req.params.sovereignId, 10);
+    const sovereignId = parseInt(req.params.sovereignId as string, 10);
     if (isNaN(sovereignId)) {
       return res.status(400).json({ error: 'Invalid sovereignId' });
     }
@@ -230,7 +230,7 @@ router.put('/:sovereignId', async (req: Request, res: Response) => {
  */
 router.post('/:sovereignId/upload', pageUpload.single('file'), async (req: Request, res: Response) => {
   try {
-    const sovereignId = parseInt(req.params.sovereignId, 10);
+    const sovereignId = parseInt(req.params.sovereignId as string, 10);
     if (isNaN(sovereignId)) {
       return res.status(400).json({ error: 'Invalid sovereignId' });
     }
@@ -265,7 +265,7 @@ router.post('/:sovereignId/upload', pageUpload.single('file'), async (req: Reque
       return res.status(502).json({ error: 'Failed to upload to IPFS' });
     }
 
-    const pinataResult = await pinataRes.json();
+    const pinataResult = await pinataRes.json() as { IpfsHash: string };
     const url = `${PINATA_GATEWAY}/${pinataResult.IpfsHash}`;
 
     return res.json({ url, ipfsHash: pinataResult.IpfsHash });

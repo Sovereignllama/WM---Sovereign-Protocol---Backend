@@ -54,7 +54,7 @@ router.post('/image', upload.single('file'), async (req: Request, res: Response)
       return res.status(502).json({ error: 'Failed to upload image to IPFS' });
     }
 
-    const result = await response.json();
+    const result = await response.json() as { IpfsHash: string };
     const url = `${PINATA_GATEWAY}/${result.IpfsHash}`;
 
     return res.json({ url, ipfsHash: result.IpfsHash });
@@ -112,7 +112,7 @@ router.post('/metadata', async (req: Request, res: Response) => {
       return res.status(502).json({ error: 'Failed to upload metadata to IPFS' });
     }
 
-    const result = await response.json();
+    const result = await response.json() as { IpfsHash: string };
     const url = `${PINATA_GATEWAY}/${result.IpfsHash}`;
 
     return res.json({ url, ipfsHash: result.IpfsHash });
