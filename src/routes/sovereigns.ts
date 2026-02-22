@@ -65,6 +65,7 @@ router.get('/stats', async (_req: Request, res: Response) => {
       statusCounts,
       totalRaised,
       totalFees,
+      totalFeesCollected,
       volumeAgg,
       tradeCount,
     ] = await Promise.all([
@@ -78,6 +79,10 @@ router.get('/stats', async (_req: Request, res: Response) => {
       ]),
       Sovereign.aggregate([
         { $group: { _id: null, total: { $sum: { $toLong: '$totalGorFeesDistributed' } } } }
+      ]),
+      // Total fees collected across all sovereigns (from on-chain sync)
+      Sovereign.aggregate([
+        { $group: { _id: null, total: { $sum: { $toLong: '$totalGorFeesCollected' } } } }
       ]),
       // Sum gorAmount from all EngineSwap events for total trading volume
       Event.aggregate([
@@ -104,6 +109,7 @@ router.get('/stats', async (_req: Request, res: Response) => {
       },
       totalRaisedLamports: totalRaised[0]?.total?.toString() || '0',
       totalFeesDistributedLamports: totalFees[0]?.total?.toString() || '0',
+      totalFeesCollectedLamports: totalFeesCollected[0]?.total?.toString() || '0',
       totalTradingVolumeLamports: volumeAgg[0]?.totalVolume?.toString() || '0',
       totalTradeCount: tradeCount,
     });
