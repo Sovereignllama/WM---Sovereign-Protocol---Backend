@@ -3,6 +3,23 @@ import { GenesisNFT, Sovereign } from '../models';
 
 const router = Router();
 
+// GET /api/nfts/counts - NFT minted counts per sovereign (batch)
+router.get('/counts', async (_req: Request, res: Response) => {
+  try {
+    const counts = await GenesisNFT.aggregate([
+      { $group: { _id: '$sovereign', count: { $sum: 1 } } },
+    ]);
+    const result: Record<string, number> = {};
+    for (const c of counts) {
+      result[c._id] = c.count;
+    }
+    res.json(result);
+  } catch (error) {
+    console.error('Error fetching NFT counts:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // GET /api/nfts - List NFTs with filters
 router.get('/', async (req: Request, res: Response) => {
   try {
