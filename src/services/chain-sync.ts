@@ -1,6 +1,7 @@
 import { Connection, PublicKey } from '@solana/web3.js';
 import { config } from '../config';
 import { Sovereign } from '../models/Sovereign';
+import { GenesisNFT } from '../models/GenesisNFT';
 
 // ============================================================
 // SovereignState Deserialization — matches on-chain state.rs
@@ -276,6 +277,149 @@ function upsertSovereign(pda: PublicKey, parsed: ParsedSovereignState) {
 }
 
 // ============================================================
+// NftPosition Deserialization — matches nft_position.rs
+// ============================================================
+
+// sha256("account:NftPosition")[0..8]
+const NFT_POSITION_DISCRIMINATOR = Buffer.from([91, 244, 89, 214, 250, 195, 212, 147]);
+
+interface ParsedNftPosition {
+  sovereign: PublicKey;
+  nftMint: PublicKey;
+  amount: bigint;
+  positionBps: number;
+  nftNumber: bigint;
+  mintedFrom: PublicKey;
+  mintedAt: bigint;
+  bump: number;
+}
+
+function deserializeNftPosition(data: Buffer): ParsedNftPosition {
+  let o = DISCRIMINATOR_SIZE;
+  const sovereign = readPubkey(data, o); o += 32;
+  const nftMint = readPubkey(data, o); o += 32;
+  const amount = readU64LE(data, o); o += 8;
+  const positionBps = readU16LE(data, o); o += 2;
+  const nftNumber = readU64LE(data, o); o += 8;
+  const mintedFrom = readPubkey(data, o); o += 32;
+  const mintedAt = readI64LE(data, o); o += 8;
+  const bump = readU8(data, o); o += 1;
+  return { sovereign, nftMint, amount, positionBps, nftNumber, mintedFrom, mintedAt, bump };
+}
+
+// ── NFT owner resolution ────────────────────────────────────
+
+// Token-2022 program ID (Genesis NFTs use Token-2022 mints)
+const TOKEN_2022_PROGRAM_ID = new PublicKey('TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb');
+
+/**
+ * Resolve the current holder of an NFT by finding the token account
+ * with balance > 0. Returns null if no holder found.
+ */
+async function resolveNftOwner(connection: Connection, nftMint: PublicKey): Promise<string | null> {
+  try {
+    const result = await connection.getTokenLargestAccounts(nftMint);
+    for (const accountInfo of result.value) {
+      if (Number(accountInfo.amount) > 0) {
+        // Fetch the parsed token account to get the owner
+        const acctInfo = await connection.getParsedAccountInfo(accountInfo.address);
+        if (acctInfo.value && 'parsed' in acctInfo.value.data) {
+          return acctInfo.value.data.parsed?.info?.owner || null;
+        }
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Batch-resolve NFT owners. Groups calls to avoid overloading the RPC.
+ */
+async function batchResolveOwners(
+  connection: Connection,
+  mints: PublicKey[],
+  batchSize = 5,
+): Promise<Map<string, string>> {
+  const ownerMap = new Map<string, string>();
+  for (let i = 0; i < mints.length; i += batchSize) {
+    const batch = mints.slice(i, i + batchSize);
+    const results = await Promise.allSettled(
+      batch.map(mint => resolveNftOwner(connection, mint)),
+    );
+    results.forEach((result, idx) => {
+      if (result.status === 'fulfilled' && result.value) {
+        ownerMap.set(batch[idx].toBase58(), result.value);
+      }
+    });
+    // Small delay between batches to be RPC-friendly
+    if (i + batchSize < mints.length) {
+      await sleep(200);
+    }
+  }
+  return ownerMap;
+}
+
+// ── Upsert one NFT position ────────────────────────────────
+
+function upsertNftPosition(
+  positionPDA: PublicKey,
+  parsed: ParsedNftPosition,
+  owner: string,
+) {
+  return GenesisNFT.findOneAndUpdate(
+    { mint: parsed.nftMint.toBase58() },
+    {
+      $set: {
+        owner,
+        sovereign: parsed.sovereign.toBase58(),
+        deposit: parsed.mintedFrom.toBase58(),
+        sharesBps: parsed.positionBps,
+        depositAmount: parsed.amount.toString(),
+        name: `$overeign NFT #${parsed.nftNumber.toString()}`,
+        symbol: 'GSLP',
+        mintedAt: tsToDate(parsed.mintedAt) || new Date(),
+      },
+    },
+    { upsert: true, new: true },
+  );
+}
+
+// ── Fetch NftPositions with retry ───────────────────────────
+
+async function fetchNftPositionsWithRetry(
+  connection: Connection,
+): ReturnType<Connection['getProgramAccounts']> {
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      return await connection.getProgramAccounts(PROGRAM_ID, {
+        filters: [
+          {
+            memcmp: {
+              offset: 0,
+              bytes: NFT_POSITION_DISCRIMINATOR.toString('base64'),
+              encoding: 'base64',
+            },
+          },
+        ],
+      });
+    } catch (err: any) {
+      const msg = err?.message || String(err);
+      const isRetryable = msg.includes('503') || msg.includes('502') || msg.includes('429') || msg.includes('timeout') || msg.includes('ECONNRESET');
+      if (isRetryable && attempt < MAX_RETRIES) {
+        const delay = BASE_DELAY_MS * Math.pow(2, attempt - 1);
+        console.warn(`[NftSync] Attempt ${attempt}/${MAX_RETRIES} failed, retrying in ${delay / 1000}s...`);
+        await sleep(delay);
+      } else {
+        throw err;
+      }
+    }
+  }
+  throw new Error('Unreachable');
+}
+
+// ============================================================
 // Retry helper
 // ============================================================
 
@@ -347,6 +491,70 @@ async function syncOnce(connection: Connection): Promise<number> {
   }
 }
 
+/**
+ * Fetch all NftPosition accounts from chain, resolve current owners,
+ * and upsert them into the GenesisNFT collection.
+ */
+async function syncNftsOnce(connection: Connection): Promise<number> {
+  try {
+    console.log('[NftSync] Fetching all NftPosition accounts...');
+
+    const accounts = await fetchNftPositionsWithRetry(connection);
+    console.log(`[NftSync] Found ${accounts.length} NftPosition account(s) on-chain`);
+
+    if (accounts.length === 0) return 0;
+
+    // Parse all positions
+    const parsed: Array<{ pubkey: PublicKey; pos: ParsedNftPosition }> = [];
+    for (const { pubkey, account } of accounts) {
+      try {
+        const pos = deserializeNftPosition(Buffer.from(account.data));
+        parsed.push({ pubkey, pos });
+      } catch (err) {
+        console.error(`[NftSync] Failed to parse NftPosition ${pubkey.toBase58()}:`, err);
+      }
+    }
+
+    // Batch-resolve current NFT owners via token accounts
+    const mints = parsed.map(p => p.pos.nftMint);
+    const ownerMap = await batchResolveOwners(connection, mints);
+
+    // Upsert each NFT into MongoDB
+    let upserted = 0;
+    for (const { pubkey, pos } of parsed) {
+      const owner = ownerMap.get(pos.nftMint.toBase58());
+      if (!owner) {
+        // NFT may have been burned — skip or mark as burned
+        continue;
+      }
+      try {
+        await upsertNftPosition(pubkey, pos, owner);
+        upserted++;
+      } catch (err) {
+        console.error(`[NftSync] Failed to upsert NFT ${pos.nftMint.toBase58()}:`, err);
+      }
+    }
+
+    if (upserted > 0) {
+      console.log(`[NftSync] Upserted ${upserted} Genesis NFT(s) into MongoDB`);
+    }
+
+    // Clean up NFTs that no longer exist on-chain (burned)
+    const onChainMints = new Set(parsed.map(p => p.pos.nftMint.toBase58()));
+    const dbNfts = await GenesisNFT.find({}, { mint: 1 }).lean();
+    const stale = dbNfts.filter((n: any) => !onChainMints.has(n.mint));
+    if (stale.length > 0) {
+      await GenesisNFT.deleteMany({ mint: { $in: stale.map((n: any) => n.mint) } });
+      console.log(`[NftSync] Removed ${stale.length} burned/stale NFT(s) from MongoDB`);
+    }
+
+    return upserted;
+  } catch (err) {
+    console.error('[NftSync] NFT sync cycle failed:', err);
+    return 0;
+  }
+}
+
 // ============================================================
 // Polling loop
 // ============================================================
@@ -377,8 +585,10 @@ export function startChainSync(intervalMs = 60_000): void {
 
   // Delay first sync by 10s to let the RPC warm up after deploy
   setTimeout(() => {
-    syncOnce(connection);
-    pollTimer = setInterval(() => syncOnce(connection), intervalMs);
+    syncOnce(connection).then(() => syncNftsOnce(connection));
+    pollTimer = setInterval(() => {
+      syncOnce(connection).then(() => syncNftsOnce(connection));
+    }, intervalMs);
   }, 10_000);
 }
 
