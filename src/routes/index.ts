@@ -6,6 +6,8 @@ import proposalsRouter from './proposals';
 import eventsRouter from './events';
 import uploadRouter from './upload';
 import sovereignPagesRouter from './sovereign-pages';
+import nftMetadataRouter from './nft-metadata';
+import rpcProxyRouter from './rpc-proxy';
 
 const router = Router();
 
@@ -16,6 +18,8 @@ router.use('/proposals', proposalsRouter);
 router.use('/events', eventsRouter);
 router.use('/upload', uploadRouter);
 router.use('/sovereign-pages', sovereignPagesRouter);
+router.use('/nft-metadata', nftMetadataRouter);
+router.use('/rpc', rpcProxyRouter);
 
 // Health check
 router.get('/health', (_req, res) => {

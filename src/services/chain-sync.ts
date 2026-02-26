@@ -577,17 +577,44 @@ export function startChainSync(intervalMs = 60_000): void {
     return;
   }
 
-  const connection = new Connection(config.rpcUrl, {
+  const connectionConfig: Record<string, unknown> = {
+    commitment: 'confirmed' as const,
+    confirmTransactionInitialTimeout: 60_000,
+    ...(config.rpcApiKey && {
+      httpHeaders: { Authorization: `Bearer ${config.rpcApiKey}` },
+    }),
+  };
+  const primaryConnection = new Connection(config.rpcUrl, connectionConfig as Parameters<typeof Connection>[1]);
+  const backupConnection = new Connection(config.backupRpcUrl, {
     commitment: 'confirmed',
     confirmTransactionInitialTimeout: 60_000,
   });
-  console.log(`[ChainSync] Starting — syncing every ${intervalMs / 1000}s from ${config.rpcUrl}`);
+
+  console.log(`[ChainSync] Starting — syncing every ${intervalMs / 1000}s`);
+  console.log(`[ChainSync]   Primary RPC: ${config.rpcUrl}${config.rpcApiKey ? ' (authenticated)' : ''}`);
+  console.log(`[ChainSync]   Backup  RPC: ${config.backupRpcUrl}`);
+
+  /** Try primary, fall back to backup on failure */
+  async function syncWithFallback(conn: Connection, backup: Connection) {
+    try {
+      await syncOnce(conn);
+      await syncNftsOnce(conn);
+    } catch (err) {
+      console.warn(`[ChainSync] Primary RPC failed, falling back to backup: ${(err as Error).message}`);
+      try {
+        await syncOnce(backup);
+        await syncNftsOnce(backup);
+      } catch (backupErr) {
+        console.error(`[ChainSync] Backup RPC also failed: ${(backupErr as Error).message}`);
+      }
+    }
+  }
 
   // Delay first sync by 10s to let the RPC warm up after deploy
   setTimeout(() => {
-    syncOnce(connection).then(() => syncNftsOnce(connection));
+    syncWithFallback(primaryConnection, backupConnection);
     pollTimer = setInterval(() => {
-      syncOnce(connection).then(() => syncNftsOnce(connection));
+      syncWithFallback(primaryConnection, backupConnection);
     }, intervalMs);
   }, 10_000);
 }

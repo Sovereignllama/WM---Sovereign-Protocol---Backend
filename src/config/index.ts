@@ -10,10 +10,16 @@ export const config = {
   
   // Gorbagana
   rpcUrl: process.env.GORBAGANA_RPC_URL || 'https://rpc.trashscan.io',
+  rpcApiKey: process.env.GORBAGANA_RPC_API_KEY || '',
+  backupRpcUrl: process.env.GORBAGANA_BACKUP_RPC_URL || 'https://rpc.trashscan.io',
   programId: process.env.PROGRAM_ID || '',
   
   // Pinata IPFS
   pinataJwt: process.env.PINATA_JWT || '',
+
+  // NFT Metadata images
+  collectionImageUrl: process.env.COLLECTION_IMAGE_URL || '',
+  defaultNftImageUrl: process.env.DEFAULT_NFT_IMAGE_URL || '',
   
   // Webhooks
   heliusWebhookSecret: process.env.HELIUS_WEBHOOK_SECRET || '',

@@ -1,11 +1,12 @@
 import { Router, Request, Response } from 'express';
 import multer from 'multer';
+import { PublicKey } from '@solana/web3.js';
 import { config } from '../config';
 
 const router = Router();
 
 const PINATA_API_URL = 'https://api.pinata.cloud';
-const PINATA_GATEWAY = 'https://gateway.pinata.cloud/ipfs';
+const PINATA_GATEWAY = process.env.PINATA_GATEWAY_URL || 'https://gateway.pinata.cloud/ipfs';
 
 // Configure multer for in-memory file uploads (max 5MB)
 const upload = multer({
@@ -21,14 +22,55 @@ const upload = multer({
 });
 
 /**
+ * Verify a wallet signature for upload authentication.
+ * The message format is: "Upload to Sovereign Protocol at <timestamp>"
+ * Timestamp must be within 5 minutes.
+ */
+async function verifyUploadAuth(wallet: string, timestamp: number, signature: string): Promise<{ valid: boolean; error?: string }> {
+  if (!wallet || !timestamp || !signature) {
+    return { valid: false, error: 'Missing auth fields: wallet, timestamp, signature' };
+  }
+
+  const now = Date.now();
+  if (Math.abs(now - timestamp) > 5 * 60 * 1000) {
+    return { valid: false, error: 'Signature expired. Please sign again.' };
+  }
+
+  const message = `Upload to Sovereign Protocol at ${timestamp}`;
+  const messageBytes = new TextEncoder().encode(message);
+
+  try {
+    const pubkey = new PublicKey(wallet);
+    const sigBytes = Buffer.from(signature, 'base64');
+    const nacl = await import('tweetnacl');
+    const verified = nacl.sign.detached.verify(messageBytes, sigBytes, pubkey.toBytes());
+
+    if (!verified) {
+      return { valid: false, error: 'Invalid signature' };
+    }
+    return { valid: true };
+  } catch {
+    return { valid: false, error: 'Signature verification failed' };
+  }
+}
+
+/**
  * POST /api/upload/image
  * Upload an image file to IPFS via Pinata
+ * Requires wallet signature auth (fields in multipart body: wallet, timestamp, signature)
  * Returns: { url: string } - the IPFS gateway URL
  */
 router.post('/image', upload.single('file'), async (req: Request, res: Response) => {
   try {
     if (!config.pinataJwt) {
       return res.status(500).json({ error: 'Pinata not configured on server' });
+    }
+
+    // Verify wallet signature
+    const { wallet, timestamp, signature } = req.body;
+    const auth = await verifyUploadAuth(wallet, parseInt(timestamp, 10), signature);
+    if (!auth.valid) {
+      return res.status(401).json({ error: auth.error || 'Unauthorized' });
     }
 
     if (!req.file) {
@@ -76,7 +118,13 @@ router.post('/metadata', async (req: Request, res: Response) => {
       return res.status(500).json({ error: 'Pinata not configured on server' });
     }
 
-    const { name, symbol, description, imageUrl } = req.body;
+    const { name, symbol, description, imageUrl, wallet, timestamp, signature } = req.body;
+
+    // Verify wallet signature
+    const auth = await verifyUploadAuth(wallet, timestamp, signature);
+    if (!auth.valid) {
+      return res.status(401).json({ error: auth.error || 'Unauthorized' });
+    }
 
     if (!name || !symbol || !imageUrl) {
       return res.status(400).json({ error: 'name, symbol, and imageUrl are required' });
