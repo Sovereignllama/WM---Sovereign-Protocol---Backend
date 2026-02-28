@@ -584,7 +584,7 @@ export function startChainSync(intervalMs = 60_000): void {
       httpHeaders: { Authorization: `Bearer ${config.rpcApiKey}` },
     }),
   };
-  const primaryConnection = new Connection(config.rpcUrl, connectionConfig as Parameters<typeof Connection>[1]);
+  const primaryConnection = new Connection(config.rpcUrl, connectionConfig as ConstructorParameters<typeof Connection>[1]);
   const backupConnection = new Connection(config.backupRpcUrl, {
     commitment: 'confirmed',
     confirmTransactionInitialTimeout: 60_000,

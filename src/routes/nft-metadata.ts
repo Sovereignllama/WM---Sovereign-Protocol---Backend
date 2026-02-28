@@ -79,7 +79,7 @@ router.get('/:sovereign/:number', async (req: Request, res: Response) => {
         { trait_type: 'Token', value: tokenSymbol },
         { trait_type: 'Position BPS', value: positionBps, display_type: 'number' },
         { trait_type: 'Deposit Amount', value: depositAmount },
-        { trait_type: 'NFT Number', value: parseInt(nftNumber, 10), display_type: 'number' },
+        { trait_type: 'NFT Number', value: parseInt(nftNumber as string, 10), display_type: 'number' },
         { trait_type: 'Status', value: sovereign?.status || 'Unknown' },
       ],
       properties: {
