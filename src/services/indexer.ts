@@ -3,7 +3,7 @@ import { config } from '../config';
 import { PublicKey } from '@solana/web3.js';
 
 // V3 Engine Program ID
-const ENGINE_V3_PROGRAM_ID = new PublicKey('Sov7HzpTsU3GttXmHBzjRhrjrCQ5RPYhkMns6zNUNtt');
+const ENGINE_V3_PROGRAM_ID = new PublicKey('SovTXTTvFW3KDxaxBQ5jwL2wTzPQtdXBbwDr3PJgpmy');
 
 // Helius webhook event structure
 interface HeliusWebhookEvent {
