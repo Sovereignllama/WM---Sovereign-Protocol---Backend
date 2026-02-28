@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import mongoSanitize from 'express-mongo-sanitize';
 import { config } from './config';
 import { connectDatabase } from './config/database';
 import apiRoutes from './routes';
@@ -38,6 +39,9 @@ async function main() {
 
   // Body parsing
   app.use(express.json({ limit: '10mb' }));
+
+  // Sanitize MongoDB queries — strips $-prefixed keys from req.body/query/params
+  app.use(mongoSanitize());
 
   // Routes
   app.use('/api', apiRoutes);

@@ -1,7 +1,41 @@
 import { Router, Request, Response } from 'express';
+import express from 'express';
 import { config } from '../config';
 
 const router = Router();
+
+// ── Allowed JSON-RPC methods (read-only + essential signing) ──
+const ALLOWED_RPC_METHODS = new Set([
+  // Account reads
+  'getAccountInfo',
+  'getMultipleAccounts',
+  'getProgramAccounts',
+  'getTokenAccountBalance',
+  'getTokenAccountsByOwner',
+  'getTokenAccountsByDelegate',
+  'getTokenSupply',
+  // Transaction reads
+  'getTransaction',
+  'getSignaturesForAddress',
+  'getSignatureStatuses',
+  // Block/slot info
+  'getLatestBlockhash',
+  'getBlockHeight',
+  'getSlot',
+  'getEpochInfo',
+  'getHealth',
+  'getVersion',
+  'getMinimumBalanceForRentExemption',
+  'getFeeForMessage',
+  // Sending transactions (user-signed)
+  'sendTransaction',
+  'simulateTransaction',
+  // Balance
+  'getBalance',
+]);
+
+// Tighter body limit for RPC proxy (50KB max — normal RPC calls are tiny)
+const rpcBodyLimit = express.json({ limit: '50kb' });
 
 /**
  * POST /api/rpc
@@ -9,8 +43,16 @@ const router = Router();
  * Keeps the API key server-side — frontend never sees it.
  * Falls back to backup RPC on failure.
  */
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', rpcBodyLimit, async (req: Request, res: Response) => {
   try {
+    // ── Validate JSON-RPC method ──
+    const { method } = req.body || {};
+    if (!method || typeof method !== 'string') {
+      return res.status(400).json({ error: 'Missing or invalid JSON-RPC method' });
+    }
+    if (!ALLOWED_RPC_METHODS.has(method)) {
+      return res.status(403).json({ error: `RPC method "${method}" is not allowed` });
+    }
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
